@@ -1,8 +1,6 @@
-#FirstWLO.py
 import PySimpleGUI as sg
 import pandas as pd
-from xlsxwriter.custom import Custom
-
+import xml.etree.ElementTree as ET
 from FirstIO import load_xml_file, save_xml_file, get_element_family
 from Schema_Window import SchemaWindow
 from Options_Menu import OptionsMenu  # Import the new OptionsMenu class
@@ -15,17 +13,61 @@ class FirstWLO:
         self.settings = self.load_settings()  # Load the settings
         self.layout = self.create_layout()
         self.window = sg.Window('FirstWLO', self.layout, finalize=True, resizable=not self.settings['-LOCK_RESIZE-'])
+        self.main_window = None
 
     def load_settings(self):
         """Load the settings from the settings file."""
-    try:
-        tree = ET.parse('settings.xml')
-        root = tree.getroot()
-        settings = {child.tag: child.text for child in root}
-    except FileNotFoundError:
-        settings = {}
-    return settings
+        try:
+            tree = ET.parse('Settings/Defaults/default_settings.xml')  # Update the path to the XML file
+            root = tree.getroot()
+            settings = {child.tag: child.text for child in root}
+        except FileNotFoundError:
+            settings = {}
 
+        settings['-LOCK_RESIZE-'] = settings.get('-LOCK_RESIZE-', 'false').lower() == 'true'  # Convert the string to a boolean
+        return settings
+
+    def create_layout(self):
+        """Create the GUI layout."""
+        layout = [
+            [sg.Text('XML File:'), sg.Input(key='-FILE-'), sg.FileBrowse()],
+            [sg.Button('Load XML'), sg.Button("Ima'Schema"), sg.Button('Exit'), sg.Button('Settings')],
+            [self.create_xml_data_frame()],
+            [self.create_custom_values_frame()],
+            [sg.Button('Reset Custom Values'), sg.Button('Save Custom Values'), sg.Button('Refresh Windows')]
+        ]
+        return layout
+
+    def create_xml_data_frame(self):
+        """Create the XML Data frame."""
+        return sg.Frame('XML Data', [
+            [sg.Table(
+                values=self.xml_data.to_numpy().tolist(),
+                headings=['Tag', 'Element Name', 'Schema', 'Default Values', 'Relations'],
+                display_row_numbers=True,
+                key='-TABLE-XML-',
+                justification='left',
+                auto_size_columns=False,
+                col_widths=[5, 10, 10, 30, 10, 20],
+                num_rows=20
+            )]
+        ], pad=(5, 5), element_justification='center', relief='raised', border_width=2)
+
+    def create_custom_values_frame(self):
+        """Create the Custom Values frame."""
+        return sg.Frame('Custom Values', [
+            [sg.Table(
+                values=self.custom_values.to_numpy().tolist(),
+                headings=['Element Name', 'Default Value', 'Custom Value'],
+                display_row_numbers=True,
+                key='-TABLE-CUSTOM-VALUES-',
+                justification='left',
+                auto_size_columns=False,
+                col_widths=[10, 30, 30, 30],
+                enable_events=True,
+                bind_return_key=True
+            )]
+        ], pad=(5, 5), element_justification='center', relief='raised', border_width=2)
 
     def run(self):
         """Start the main event loop for the GUI."""
@@ -53,6 +95,10 @@ class FirstWLO:
                 self.settings = self.load_settings()
                 self.window.close()
                 self.window = sg.Window('FirstWLO', self.layout, finalize=True, resizable=not self.settings['-LOCK_RESIZE-'])
+            elif event == 'Refresh Windows':
+                if self.main_window is not None:
+                    self.main_window.close()
+                self.main_window = sg.Window('FirstWLO', self.layout, finalize=True, resizable=not self.settings['-LOCK_RESIZE-'])
 
         self.window.close()
 
@@ -74,3 +120,7 @@ class FirstWLO:
             sg.popup('XML file saved successfully.')
         except Exception as e:
             sg.popup('Failed to save XML file.', str(e))
+
+# Create an instance of the FirstWLO class and run the GUI
+first_wlo = FirstWLO()
+first_wlo.run()

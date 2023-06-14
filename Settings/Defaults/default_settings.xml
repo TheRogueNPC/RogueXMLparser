@@ -1,0 +1,8 @@
+<settings>
+    <window_width>800</window_width>
+    <window_height>600</window_height>
+    <-LOCK_RESIZE->True</-LOCK_RESIZE->
+    <font_color>black</font_color>
+    <background_color>white</background_color>
+    <button_color>light blue</button_color>
+</settings>
