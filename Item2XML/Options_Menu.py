@@ -3,10 +3,11 @@ import xml.etree.ElementTree as ET
 
 class OptionsMenu:
     def __init__(self):
+        self.settings = self.load_settings()
         self.layout = self.create_layout()
         self.window = sg.Window('Settings', self.layout, finalize=True)
         self.main_window = None
-        self.settings = self.load_settings()
+
 
     def load_settings(self):
         """Load the settings from the settings.xml file."""
