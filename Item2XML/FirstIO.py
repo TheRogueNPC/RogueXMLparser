@@ -1,11 +1,10 @@
-#FirstIO.py
 import pandas as pd
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from xml.etree.ElementTree import ParseError
 
-# Generate the schema type based on the content of the XML element
 def generate_schema_type(element):
+    """Determine the schema type of an XML element based on its content."""
     if element is None:
         return 'None'
     if element.text and ('\\' in element.text or '/' in element.text):
@@ -15,81 +14,66 @@ def generate_schema_type(element):
     try:
         if element.text:
             int(element.text)
-            return 'Int'
+        return 'Int'
     except ValueError:
         pass
     return 'String'  # Default to string if none of the above conditions are met
 
 def get_element_name(tag):
-    # Some XML files use namespaces, which are included in the tag as "{namespace}tagname".
-    # This function removes the namespace and returns only the tagname.
+    """Remove namespace from tag, if present, and return only the tag name."""
     return tag.split('}')[-1] if '}' in tag else tag
 
+def get_element_family(root, element):
+    """Get the family information of an XML element."""
+    if element == root:
+        return 'Root'
+    elif len(element) > 0:
+        return 'Parent'
+    else:
+        return 'Child'
 
-# Adjust the names of the elements to include namespaces (if any) and brackets
-def adjust_element_names(root, tags):
-    element_names = []
-    for tag in tags:
-        element = root.find('.//'+tag)  # find with './/' to get elements at any level
-        element_names.append(f"<{element.tag}>" if element is not None else "")
-    return element_names
-
-# Load XML file and return two pandas dataframes: one for the XML data and one for custom values
 def load_xml_file(xml_file):
+    """Load XML file and return two pandas dataframes: one for the XML data and one for custom values."""
     try:
         tree = ET.parse(xml_file)
     except ParseError as e:
         print(f"Failed to parse XML: {e}")
-        return pd.DataFrame(), pd.DataFrame(), None
+        import traceback
+        traceback.print_exc()  # Print the stack trace
+        return pd.DataFrame(), pd.DataFrame(), None, None, None
     root = tree.getroot()
 
-    tags = []
-    default_values = []
+    rows = []
+    custom_values = []
     for elem in tree.iter():
-        tags.append(elem.tag)
-        default_values.append(elem.text if elem.text else '')
-    element_names = adjust_element_names(root, tags)
+        tag = elem.tag
+        default_value = elem.text if elem.text else ''
+        schema_type = generate_schema_type(elem)
+        element_name = "<" + get_element_name(tag) + ">"
+        element_family = get_element_family(root, elem)
+        rows.append([tag, default_value, schema_type, element_name, element_family])
+        custom_values.append([tag, default_value, ''])
 
-    df_xml = pd.DataFrame({
-        'Row': range(1, len(tags) + 1),
-        'Element Name': element_names,
-        'Tag': tags,
-        'Type': ['Element'] * len(tags),
-        'Schema': [''] * len(tags),
-        'Default Values': default_values
-    })
-    df_xml['Schema'] = df_xml.apply(lambda row: generate_schema_type(root.find('.//'+row['Tag'])), axis=1)  # calculate Schema type for each row
+    df_xml = pd.DataFrame(rows, columns=['Tag', 'Default Values', 'Schema', 'Element Name', 'Relations'])
+    df_custom_values = pd.DataFrame(custom_values, columns=['Tag', 'Default Value', 'Custom Value'])
+    return df_xml, df_custom_values, tree, root, element_family
 
-    df_custom_values = pd.DataFrame({
-        'Row': range(1, len(tags) + 1),
-        'Element Name': element_names,
-        'Default Value': default_values,
-        'Custom Value': ['']*len(tags),
-        'Tag': tags
-    })
-    return df_xml, df_custom_values, tree
+def process_element(element, df_custom_values):
+    """Update the text of an XML element with the corresponding custom value from the DataFrame."""
+    tag = element.tag
+    custom_value_row = df_custom_values[df_custom_values['Tag'] == tag]
+    if not custom_value_row.empty:
+        custom_value = custom_value_row.iloc[0]['Custom Value']
+        if custom_value != '':
+            element.text = custom_value
+    for child in element:
+        process_element(child, df_custom_values)
 
-# Save the XML file with any custom values that have been added
 def save_xml_file(df_custom_values, tree, xml_file):
+    """Save the XML file with any custom values that have been added."""
     root = tree.getroot()
-
-    def process_element(element):
-        tag = element.tag
-        custom_value_row = df_custom_values[df_custom_values['Tag'] == tag]
-        if not custom_value_row.empty:
-            custom_value = custom_value_row.iloc[0]['Custom Value']
-            if custom_value != '':
-                element.text = custom_value
-        for child in element:
-            process_element(child)
-
-    process_element(root)
+    process_element(root, df_custom_values)
     tree_string = ET.tostring(root, encoding="utf-8")
     pretty_tree_string = minidom.parseString(tree_string).toprettyxml(indent="\t")
-    with open(xml_file, "w") as f:
+    with open(xml_file, 'w') as f:
         f.write(pretty_tree_string)
-
-# Reset the 'Custom Value' column in the dataframe to be empty strings
-def reset_xml_values(df):
-    df['Custom Value'] = ''
-    return df
