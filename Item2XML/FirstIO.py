@@ -23,14 +23,19 @@ def get_element_name(tag):
     """Remove namespace from tag, if present, and return only the tag name."""
     return tag.split('}')[-1] if '}' in tag else tag
 
-def get_element_family(root, element):
+def get_parent_map(tree):
+    return {c: p for p in tree.iter() for c in p}
+
+def get_element_family(element, root, parent_map):
     """Get the family information of an XML element."""
     if element == root:
         return 'Root'
     elif len(element) > 0:
-        return 'Parent'
+        children = [child.tag for child in element]
+        return f"Parent (Children: {', '.join(children)})"
     else:
-        return 'Child'
+        parent = parent_map[element].tag
+        return f"Child (Parent: {parent})"
 
 def load_xml_file(xml_file):
     """Load XML file and return two pandas dataframes: one for the XML data and one for custom values."""
@@ -43,6 +48,8 @@ def load_xml_file(xml_file):
         return pd.DataFrame(), pd.DataFrame(), None, None, None
     root = tree.getroot()
 
+    parent_map = get_parent_map(tree)
+
     rows = []
     custom_values = []
     for elem in tree.iter():
@@ -50,7 +57,7 @@ def load_xml_file(xml_file):
         default_value = elem.text if elem.text else ''
         schema_type = generate_schema_type(elem)
         element_name = "<" + get_element_name(tag) + ">"
-        element_family = get_element_family(root, elem)
+        element_family = get_element_family(root, elem, parent_map)
         rows.append([tag, default_value, schema_type, element_name, element_family])
         custom_values.append([tag, default_value, ''])
 
